@@ -24,8 +24,9 @@ To refresh the captures, run:
 ./scripts/capture-zed.sh
 ```
 
-The helper uses Playwright's CLI, captures both light and dark variants, and uses
-`scripts/zed-storage-state.json` to hide the cookie banner before capture.
+The helper uses Playwright's CLI, captures both light and dark variants, and
+writes a temporary anonymous storage state to hide the cookie banner before
+capture.
 
 ## High-Level Style
 
