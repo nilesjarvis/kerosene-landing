@@ -64,13 +64,13 @@
 
     const downloadTargets = {
         mac: {
-            label: "Download for macOS",
-            detail: "Universal build",
+            label: "View Linux releases",
+            detail: "macOS build planned",
             icon: Apple,
         },
         windows: {
-            label: "Download for Windows",
-            detail: "Installer placeholder",
+            label: "View Linux releases",
+            detail: "Windows build planned",
             icon: MonitorDown,
         },
         linux: {
@@ -79,8 +79,8 @@
             icon: Package,
         },
         unknown: {
-            label: "Download Kerosene",
-            detail: "Choose a release",
+            label: "View releases",
+            detail: "Linux builds available now",
             icon: Download,
         },
     };
@@ -375,7 +375,7 @@
             return `Latest release ${name}. ${asset.name}.`;
         }
 
-        return `Latest release ${name}. Choose an asset on GitHub.`;
+        return `Latest release ${name}. Linux builds are available on GitHub.`;
     }
 
     function animatedChart(canvas) {
