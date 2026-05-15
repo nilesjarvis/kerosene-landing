@@ -20,6 +20,8 @@
     import { onMount } from "svelte";
 
     const githubUrl = "https://github.com/nilesjarvis/kerosene";
+    const releasesUrl = `${githubUrl}/releases`;
+    const releasesApiUrl = "https://api.github.com/repos/nilesjarvis/kerosene/releases?per_page=10";
     const readmeUrl = "https://raw.githubusercontent.com/nilesjarvis/kerosene/main/README.md";
     const rawBaseUrl = "https://raw.githubusercontent.com/nilesjarvis/kerosene/main/";
     const readmePath = "README.md";
@@ -65,6 +67,13 @@
             detail: "Choose a release",
             icon: Download,
         },
+    };
+
+    const assetMatchers = {
+        mac: [/\.(dmg|pkg)$/i, /\b(mac|macos|darwin|apple)\b/i],
+        windows: [/\.(exe|msi)$/i, /\b(win|windows)\b/i],
+        linux: [/\.deb$/i],
+        appimage: [/\.appimage$/i],
     };
 
     const featureHighlights = [
@@ -117,11 +126,23 @@
     let activeDocsPath = readmePath;
     let docsRenderBasePath = readmePath;
     let docsLoadToken = 0;
+    let latestRelease = null;
+    let releaseStatus = "idle";
+    let releaseError = "";
     const docsCache = new Map();
 
     $: primaryDownload = downloadTargets[platform] ?? downloadTargets.unknown;
     $: isDocsPage = path === "/docs";
     $: activeDocsItem = docsNavItems.find((item) => item.path === activeDocsPath) ?? readmeItem;
+    $: releasePageUrl = latestRelease?.htmlUrl ?? releasesUrl;
+    $: releaseName = latestRelease?.name ?? "latest release";
+    $: displayVersion = latestRelease?.name ?? "Checking latest release";
+    $: releaseAssets = latestRelease?.assets ?? [];
+    $: selectedDownloadAsset = findReleaseAsset(platform, releaseAssets);
+    $: appImageAsset = findReleaseAsset("appimage", releaseAssets);
+    $: primaryDownloadUrl = selectedDownloadAsset?.browserDownloadUrl ?? releasePageUrl;
+    $: appImageDownloadUrl = appImageAsset?.browserDownloadUrl ?? releasePageUrl;
+    $: downloadNote = getDownloadNote(releaseStatus, releaseError, selectedDownloadAsset, releaseName);
 
     function detectPlatform() {
         const userAgent = navigator.userAgent.toLowerCase();
@@ -169,8 +190,6 @@
         }
         window.scrollTo(0, 0);
     }
-
-    function placeholderAction() {}
 
     function escapeHtml(value) {
         return value
@@ -316,6 +335,31 @@
                 cursor.remove();
             },
         };
+    }
+
+    function findReleaseAsset(kind, assets) {
+        if (kind === "unknown") {
+            return assets[0] ?? null;
+        }
+
+        const matchers = assetMatchers[kind] ?? [];
+        return assets.find((asset) => matchers.some((matcher) => matcher.test(asset.name))) ?? null;
+    }
+
+    function getDownloadNote(status, error, asset, name) {
+        if (status === "loading" || status === "idle") {
+            return "Checking the latest GitHub release.";
+        }
+
+        if (status === "error") {
+            return `${error || "Could not check GitHub releases."} Opening the releases page.`;
+        }
+
+        if (asset) {
+            return `Latest release ${name}. ${asset.name}.`;
+        }
+
+        return `Latest release ${name}. Choose an asset on GitHub.`;
     }
 
     function animatedChart(canvas) {
@@ -813,6 +857,43 @@
         return markdown;
     }
 
+    async function loadLatestRelease() {
+        releaseStatus = "loading";
+        releaseError = "";
+
+        try {
+            const response = await fetch(releasesApiUrl, {
+                headers: { Accept: "application/vnd.github+json" },
+            });
+
+            if (!response.ok) {
+                throw new Error(`GitHub returned ${response.status}`);
+            }
+
+            const releases = JSON.parse(await response.text());
+            const release = releases.find((item) => !item.draft);
+
+            if (!release) {
+                throw new Error("No published releases found.");
+            }
+
+            latestRelease = {
+                name: release.name || release.tag_name,
+                tagName: release.tag_name,
+                htmlUrl: release.html_url,
+                assets: (release.assets ?? []).map((asset) => ({
+                    name: asset.name,
+                    browserDownloadUrl: asset.browser_download_url,
+                })),
+            };
+            releaseStatus = "loaded";
+        } catch (error) {
+            latestRelease = null;
+            releaseError = error.message || "Could not check GitHub releases.";
+            releaseStatus = "error";
+        }
+    }
+
     function renderDocsMarkdown(markdown, basePath) {
         docsRenderBasePath = basePath;
         return marked.parse(normalizeReadmeMarkdown(markdown, basePath));
@@ -896,6 +977,7 @@
     onMount(() => {
         detectPlatform();
         syncPath();
+        loadLatestRelease();
         window.addEventListener("popstate", handlePopState);
 
         return () => window.removeEventListener("popstate", handlePopState);
@@ -920,7 +1002,7 @@
 
         <nav class="nav-links" aria-label="Primary navigation">
             <a class:active={isDocsPage} href="/docs" on:click={(event) => navigate(event, "/docs")}>Docs</a>
-            <button type="button" on:click={placeholderAction}>Releases</button>
+            <a href={releasePageUrl}>Releases</a>
         </nav>
 
         <div class="nav-actions">
@@ -928,14 +1010,14 @@
                 <Github size={15} />
                 <span>Source</span>
             </a>
-            <button
+            <a
                 class="download-small"
-                type="button"
-                on:click={placeholderAction}
+                href={primaryDownloadUrl}
+                aria-label={`Download ${releaseName}`}
             >
                 <Download size={15} />
                 <span>Download</span>
-            </button>
+            </a>
         </div>
     </header>
 
@@ -1016,7 +1098,7 @@
             <div class="hero-copy">
                 <p class="eyebrow">
                     <TerminalSquare size={15} />
-                    v0.1.2-alpha
+                    {displayVersion}
                 </p>
 
                 <h1 id="hero-title">
@@ -1030,25 +1112,25 @@
                 </p>
 
                 <div class="cta-row" aria-label="Primary actions">
-                    <button
+                    <a
                         class="button primary"
-                        type="button"
-                        on:click={placeholderAction}
+                        href={primaryDownloadUrl}
+                        aria-label={`${primaryDownload.label} from ${releaseName}`}
                     >
                         <svelte:component this={primaryDownload.icon} size={17} />
                         <span>{primaryDownload.label}</span>
                         <kbd>D</kbd>
-                    </button>
+                    </a>
 
                     {#if platform === "linux"}
-                        <button
+                        <a
                             class="button secondary"
-                            type="button"
-                            on:click={placeholderAction}
+                            href={appImageDownloadUrl}
+                            aria-label={`Download AppImage from ${releaseName}`}
                         >
                             <FileArchive size={17} />
                             <span>AppImage</span>
-                        </button>
+                        </a>
                     {/if}
 
                     <a class="button secondary" href={githubUrl}>
@@ -1058,8 +1140,7 @@
                 </div>
 
                 <p class="platform-note">
-                    Detected {platformName}. {primaryDownload.detail}. Download
-                    links are placeholders.
+                    Detected {platformName}. {primaryDownload.detail}. {downloadNote}
                 </p>
             </div>
 
