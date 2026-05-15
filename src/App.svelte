@@ -2,20 +2,33 @@
     import { marked } from "marked";
     import {
         Apple,
+        Activity,
+        BookOpen,
         Download,
         ExternalLink,
         FileArchive,
+        Filter,
         Github,
         MonitorDown,
         Package,
         RefreshCw,
         TerminalSquare,
+        Timer,
+        VolumeX,
+        Wallet,
     } from "lucide-svelte";
     import { onMount } from "svelte";
 
     const githubUrl = "https://github.com/nilesjarvis/kerosene";
     const readmeUrl = "https://raw.githubusercontent.com/nilesjarvis/kerosene/main/README.md";
     const rawBaseUrl = "https://raw.githubusercontent.com/nilesjarvis/kerosene/main/";
+    const readmePath = "README.md";
+    const readmeItem = {
+        title: "Overview",
+        path: readmePath,
+        rawUrl: readmeUrl,
+        externalUrl: `${githubUrl}/blob/main/README.md`,
+    };
 
     marked.use({
         gfm: true,
@@ -54,6 +67,45 @@
         },
     };
 
+    const featureHighlights = [
+        {
+            title: "Mute Tickers",
+            description: "Hide noisy symbols from search, watchlists, and trading panes so the workspace stays focused.",
+            icon: VolumeX,
+            accent: "#ff8a1f",
+        },
+        {
+            title: "HIP-3-Only Mode",
+            description: "Filter the terminal down to HIP-3 markets when a session needs a narrower venue scope.",
+            icon: Filter,
+            accent: "#6ee7b7",
+        },
+        {
+            title: "Advanced Orders",
+            description: "Run client-side Chase orders and TWAP schedules with local lifecycle tracking.",
+            icon: Timer,
+            accent: "#a5b4fc",
+        },
+        {
+            title: "Liquidation Feed",
+            description: "Watch liquidation flow alongside active markets without leaving the trading layout.",
+            icon: Activity,
+            accent: "#fda4af",
+        },
+        {
+            title: "Wallet Tracker",
+            description: "Follow saved wallets, balances, and address-book context from the same desktop terminal.",
+            icon: Wallet,
+            accent: "#67e8f9",
+        },
+        {
+            title: "Local Trading Journal",
+            description: "Review fills and aggregated trades locally, including diagnostics for position chains.",
+            icon: BookOpen,
+            accent: "#fcd34d",
+        },
+    ];
+
     let platform = "unknown";
     let platformName = "your platform";
     let path = "/";
@@ -61,9 +113,15 @@
     let docsStatus = "idle";
     let docsError = "";
     let docsUpdatedAt = "";
+    let docsNavItems = [readmeItem];
+    let activeDocsPath = readmePath;
+    let docsRenderBasePath = readmePath;
+    let docsLoadToken = 0;
+    const docsCache = new Map();
 
     $: primaryDownload = downloadTargets[platform] ?? downloadTargets.unknown;
     $: isDocsPage = path === "/docs";
+    $: activeDocsItem = docsNavItems.find((item) => item.path === activeDocsPath) ?? readmeItem;
 
     function detectPlatform() {
         const userAgent = navigator.userAgent.toLowerCase();
@@ -92,6 +150,10 @@
 
     function syncPath() {
         path = window.location.pathname || "/";
+
+        if (path === "/docs") {
+            activeDocsPath = new URLSearchParams(window.location.search).get("doc") || readmePath;
+        }
     }
 
     function navigate(event, target) {
@@ -102,6 +164,9 @@
         event.preventDefault();
         window.history.pushState({}, "", target);
         syncPath();
+        if (path === "/docs") {
+            loadDocs(false, activeDocsPath);
+        }
         window.scrollTo(0, 0);
     }
 
@@ -120,52 +185,123 @@
         return escapeHtml(value).replaceAll("`", "&#96;");
     }
 
-    function resolveReadmeUrl(url, asset = false) {
+    function encodeRepoPath(path) {
+        return path.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+    }
+
+    function normalizeRepoPath(url, basePath = readmePath) {
+        const baseDirectory = basePath.includes("/") ? basePath.slice(0, basePath.lastIndexOf("/") + 1) : "";
+
+        try {
+            return decodeURIComponent(
+                new URL(url, `https://kerosene.local/${baseDirectory}`).pathname.replace(/^\/+/, ""),
+            );
+        } catch (_error) {
+            return url.replace(/^\.?\//, "");
+        }
+    }
+
+    function resolveMarkdownPath(url, basePath = readmePath) {
+        if (!url) return "";
+
+        let pathPart = url.trim().split("#")[0].split("?")[0];
+        if (!pathPart || pathPart.startsWith("#") || pathPart.startsWith("mailto:")) return "";
+
+        const rawPrefix = rawBaseUrl;
+        const blobPrefix = `${githubUrl}/blob/main/`;
+
+        if (pathPart.startsWith(rawPrefix)) {
+            pathPart = pathPart.slice(rawPrefix.length);
+        } else if (pathPart.startsWith(blobPrefix)) {
+            pathPart = pathPart.slice(blobPrefix.length);
+        } else if (/^https?:/i.test(pathPart)) {
+            return "";
+        } else if (pathPart.startsWith("/")) {
+            pathPart = pathPart.slice(1);
+        } else {
+            pathPart = normalizeRepoPath(pathPart, basePath);
+        }
+
+        pathPart = normalizeRepoPath(pathPart, readmePath);
+        return /\.md$/i.test(pathPart) ? pathPart : "";
+    }
+
+    function resolveReadmeUrl(url, asset = false, basePath = docsRenderBasePath) {
+        if (!asset) {
+            const docsPath = resolveMarkdownPath(url, basePath);
+            if (docsPath) {
+                return docsPath === readmePath ? "/docs" : `/docs?doc=${encodeURIComponent(docsPath)}`;
+            }
+        }
+
         if (/^(https?:|mailto:|#)/.test(url)) {
             return url;
         }
 
         if (url.startsWith("/")) {
-            return `${githubUrl}${url}`;
+            const repoPath = url.slice(1);
+            return asset ? `${rawBaseUrl}${encodeRepoPath(repoPath)}` : `${githubUrl}/${repoPath}`;
         }
+
+        const repoPath = normalizeRepoPath(url, basePath);
 
         if (asset) {
-            return `${rawBaseUrl}${url}`;
+            return `${rawBaseUrl}${encodeRepoPath(repoPath)}`;
         }
 
-        return `${githubUrl}/blob/main/${url}`;
+        return `${githubUrl}/blob/main/${encodeRepoPath(repoPath)}`;
     }
 
-    function normalizeReadmeMarkdown(markdown) {
+    function normalizeReadmeMarkdown(markdown, basePath = docsRenderBasePath) {
         return markdown.replace(/\b(src|href)="(?!https?:|mailto:|#|\/)([^"]+)"/g, (_match, attr, url) => {
-            const resolved = attr === "src" ? resolveReadmeUrl(url, true) : resolveReadmeUrl(url);
+            const resolved = attr === "src" ? resolveReadmeUrl(url, true, basePath) : resolveReadmeUrl(url, false, basePath);
             return `${attr}="${escapeAttribute(resolved)}"`;
         });
     }
 
     function orangeCursor(node) {
         const cursor = document.createElement("div");
+        const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+        let cursorFrame = 0;
+        let nextCursorX = -100;
+        let nextCursorY = -100;
+        let nextCursorTarget = null;
         cursor.className = "orange-cursor-ring";
         document.body.appendChild(cursor);
 
+        function applyCursorPosition() {
+            cursorFrame = 0;
+            cursor.style.setProperty("--cursor-x", `${nextCursorX}px`);
+            cursor.style.setProperty("--cursor-y", `${nextCursorY}px`);
+
+            const isInteractive = nextCursorTarget?.closest("button, a, input, textarea, select, [role='button']");
+            cursor.classList.toggle("visible", !isInteractive);
+        }
+
         function moveCursor(event) {
-            if (event.pointerType && event.pointerType !== "mouse") {
+            if (reducedMotion.matches || (event.pointerType && event.pointerType !== "mouse")) {
                 hideCursor();
                 return;
             }
 
-            cursor.style.setProperty("--cursor-x", `${event.clientX}px`);
-            cursor.style.setProperty("--cursor-y", `${event.clientY}px`);
+            nextCursorX = event.clientX;
+            nextCursorY = event.clientY;
+            nextCursorTarget = event.target instanceof Element ? event.target : null;
 
-            const isInteractive = event.target.closest("button, a, input, textarea, select, [role='button']");
-            cursor.classList.toggle("visible", !isInteractive);
+            if (!cursorFrame) {
+                cursorFrame = requestAnimationFrame(applyCursorPosition);
+            }
         }
 
         function hideCursor() {
+            if (cursorFrame) {
+                cancelAnimationFrame(cursorFrame);
+                cursorFrame = 0;
+            }
             cursor.classList.remove("visible");
         }
 
-        node.addEventListener("pointermove", moveCursor);
+        node.addEventListener("pointermove", moveCursor, { passive: true });
         node.addEventListener("pointerleave", hideCursor);
         window.addEventListener("blur", hideCursor);
 
@@ -174,13 +310,16 @@
                 node.removeEventListener("pointermove", moveCursor);
                 node.removeEventListener("pointerleave", hideCursor);
                 window.removeEventListener("blur", hideCursor);
+                if (cursorFrame) {
+                    cancelAnimationFrame(cursorFrame);
+                }
                 cursor.remove();
             },
         };
     }
 
     function animatedChart(canvas) {
-        const context = canvas.getContext("2d");
+        const context = canvas.getContext("2d", { alpha: true });
         const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
         const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
         const createPoint = (x, y, volatility) => ({
@@ -212,6 +351,21 @@
                 trailLength: 0.72 + Math.random() * 0.24,
                 verticalBand: 0.14 + Math.random() * 0.72,
                 color: layerId % 2 === 0 ? "255, 138, 31" : "255, 209, 160",
+                headPoint: {
+                    x: 0,
+                    y: value,
+                    wick: 0,
+                    volume: 0,
+                    isHead: true,
+                },
+                renderBounds: {
+                    started: false,
+                    count: 0,
+                    firstX: 0,
+                    firstY: 0,
+                    lastX: 0,
+                    lastY: 0,
+                },
             };
         };
         let layers = [];
@@ -219,8 +373,13 @@
         let height = 0;
         let animationFrame = 0;
         let lastFrame = performance.now();
+        let lastRenderedAt = 0;
         let nextSpawnAt = performance.now();
         let running = true;
+        let playing = false;
+        let inView = true;
+        let documentVisible = !document.hidden;
+        const frameInterval = 1000 / 30;
 
         function randomWalk(layer) {
             if (Math.random() < layer.trendFlipChance) {
@@ -278,44 +437,83 @@
             }
         }
 
-        function pointToCanvas(layer, point) {
-            const chartHeight = height * layer.chartHeight;
-            const centerY = height * layer.verticalBand;
+        function pointX(point) {
+            return point.x * width;
+        }
 
-            return {
-                x: point.x * width,
-                y: centerY + (point.y - 0.5) * chartHeight,
-            };
+        function pointY(layer, point) {
+            return height * layer.verticalBand + (point.y - 0.5) * height * layer.chartHeight;
         }
 
         function createHeadPoint(layer) {
-            const previousPoint = [...layer.points].reverse().find((point) => point.x <= layer.headX);
-            const nextPoint = layer.points.find((point) => point.x > layer.headX);
+            let previousPoint = null;
+            let nextPoint = null;
+
+            for (let index = 0; index < layer.points.length; index += 1) {
+                const point = layer.points[index];
+                if (point.x <= layer.headX) {
+                    previousPoint = point;
+                } else {
+                    nextPoint = point;
+                    break;
+                }
+            }
 
             if (!previousPoint || !nextPoint || layer.headX >= 1) return null;
 
             const progress = clamp((layer.headX - previousPoint.x) / (nextPoint.x - previousPoint.x), 0, 1);
             const eased = progress * progress * (3 - 2 * progress);
+            const headPoint = layer.headPoint;
 
-            return {
-                x: layer.headX,
-                y: previousPoint.y + (nextPoint.y - previousPoint.y) * eased,
-                wick: previousPoint.wick + (nextPoint.wick - previousPoint.wick) * eased,
-                volume: previousPoint.volume + (nextPoint.volume - previousPoint.volume) * eased,
-                isHead: true,
-            };
+            headPoint.x = layer.headX;
+            headPoint.y = previousPoint.y + (nextPoint.y - previousPoint.y) * eased;
+            headPoint.wick = previousPoint.wick + (nextPoint.wick - previousPoint.wick) * eased;
+            headPoint.volume = previousPoint.volume + (nextPoint.volume - previousPoint.volume) * eased;
+
+            return headPoint;
+        }
+
+        function appendPathPoint(layer, point, bounds) {
+            const x = pointX(point);
+            const y = pointY(layer, point);
+
+            if (!bounds.started) {
+                context.moveTo(x, y);
+                bounds.started = true;
+                bounds.firstX = x;
+                bounds.firstY = y;
+            } else {
+                context.lineTo(x, y);
+            }
+
+            bounds.lastX = x;
+            bounds.lastY = y;
+            bounds.count += 1;
+        }
+
+        function buildLayerPath(layer, visibleStart, headPoint) {
+            const bounds = layer.renderBounds;
+            bounds.started = false;
+            bounds.count = 0;
+            context.beginPath();
+
+            for (let pointIndex = 0; pointIndex < layer.points.length; pointIndex += 1) {
+                const point = layer.points[pointIndex];
+                if (point.x < visibleStart || point.x > layer.headX) continue;
+                appendPathPoint(layer, point, bounds);
+            }
+
+            if (headPoint && headPoint.x >= visibleStart) {
+                appendPathPoint(layer, headPoint, bounds);
+            }
+
+            return bounds.count > 1;
         }
 
         function drawLayer(layer, layerIndex, timestamp) {
             const trailStart = layer.headX - layer.trailLength;
-            const committedPoints = layer.points.filter(
-                (point) => point.x <= layer.headX && point.x >= Math.max(0, trailStart),
-            );
+            const visibleStart = Math.max(0, trailStart);
             const headPoint = createHeadPoint(layer);
-            const visiblePoints = headPoint
-                ? [...committedPoints, headPoint].filter((point) => point.x >= Math.max(0, trailStart))
-                : committedPoints;
-            if (visiblePoints.length < 2) return;
 
             const alpha = clamp(0.16 - (layerIndex % 4) * 0.018, 0.08, 0.16);
             const endFade = layer.headX <= 0.94 ? 1 : clamp((1.18 - layer.headX) / 0.24, 0, 1);
@@ -326,185 +524,381 @@
             };
 
             context.save();
-            visiblePoints.forEach((point, index) => {
-                if (index === 0) return;
+            context.lineCap = "round";
+            context.lineJoin = "round";
 
-                const previousPoint = visiblePoints[index - 1];
-                const segmentAlpha = alpha * Math.min(fadeForPoint(previousPoint), fadeForPoint(point));
-                if (segmentAlpha <= 0.004) return;
+            if (buildLayerPath(layer, visibleStart, headPoint)) {
+                const gradient = context.createLinearGradient(visibleStart * width, 0, Math.min(layer.headX, 1) * width, 0);
+                gradient.addColorStop(0, `rgba(${layer.color}, 0)`);
+                gradient.addColorStop(0.34, `rgba(${layer.color}, ${alpha * endFade})`);
+                gradient.addColorStop(1, `rgba(${layer.color}, ${alpha * endFade})`);
 
-                const current = pointToCanvas(layer, point);
-                const previous = pointToCanvas(layer, previousPoint);
-                const midpointX = (previous.x + current.x) / 2;
-                const midpointY = (previous.y + current.y) / 2;
-                const gradient = context.createLinearGradient(previous.x, previous.y, current.x, current.y);
-
-                gradient.addColorStop(0, `rgba(${layer.color}, ${alpha * fadeForPoint(previousPoint)})`);
-                gradient.addColorStop(1, `rgba(${layer.color}, ${alpha * fadeForPoint(point)})`);
-
-                context.beginPath();
-                context.moveTo(previous.x, previous.y);
-                context.quadraticCurveTo(midpointX, midpointY, current.x, current.y);
                 context.lineWidth = layerIndex === 0 ? 1.25 : 0.9;
                 context.strokeStyle = gradient;
-                context.shadowColor = "rgba(255, 138, 31, 0.16)";
-                context.shadowBlur = 14 * endFade;
                 context.stroke();
-            });
-            context.shadowBlur = 0;
+            }
 
-            visiblePoints.forEach((point, pointIndex) => {
-                if (layer.headX > 0.96 || (pointIndex % 5 !== 0 && !point.isHead)) return;
-                const current = pointToCanvas(layer, point);
-                const pointFade = fadeForPoint(point);
-                if (pointFade <= 0.08) return;
+            if (layer.headX <= 0.96) {
+                for (let pointIndex = 0; pointIndex < layer.points.length; pointIndex += 1) {
+                    if (pointIndex % 5 !== 0) continue;
+                    const point = layer.points[pointIndex];
+                    if (point.x < visibleStart || point.x > layer.headX) continue;
 
-                const wickHeight = height * point.wick;
-                context.strokeStyle = `rgba(${layer.color}, ${alpha * 0.22 * pointFade})`;
-                context.lineWidth = point.isHead ? 1 : 0.65;
-                context.beginPath();
-                context.moveTo(current.x, current.y - wickHeight);
-                context.lineTo(current.x, current.y + wickHeight);
-                context.stroke();
-            });
+                    const pointFade = fadeForPoint(point);
+                    if (pointFade <= 0.08) continue;
 
-            visiblePoints.slice(1).forEach((point, index) => {
-                const previousPoint = visiblePoints[index];
-                const segmentAlpha = alpha * 0.07 * Math.min(fadeForPoint(previousPoint), fadeForPoint(point));
-                if (segmentAlpha <= 0.002) return;
+                    const currentX = pointX(point);
+                    const currentY = pointY(layer, point);
+                    const wickHeight = height * point.wick;
+                    const barHeight = (4 + point.volume * 18) * (layerIndex === 0 ? 1 : 0.72);
+                    const barY = currentY + height * 0.07;
 
-                const current = pointToCanvas(layer, point);
-                const previous = pointToCanvas(layer, previousPoint);
-                const gradient = context.createLinearGradient(0, previous.y, 0, previous.y + 72);
-                gradient.addColorStop(0, `rgba(${layer.color}, ${segmentAlpha})`);
-                gradient.addColorStop(1, "rgba(255, 138, 31, 0)");
+                    context.strokeStyle = `rgba(${layer.color}, ${alpha * 0.2 * pointFade})`;
+                    context.lineWidth = 0.65;
+                    context.beginPath();
+                    context.moveTo(currentX, currentY - wickHeight);
+                    context.lineTo(currentX, currentY + wickHeight);
+                    context.stroke();
 
-                context.beginPath();
-                context.moveTo(previous.x, previous.y);
-                context.lineTo(current.x, current.y);
-                context.lineTo(current.x, current.y + 72);
-                context.lineTo(previous.x, previous.y + 72);
-                context.closePath();
-                context.fillStyle = gradient;
-                context.fill();
-            });
+                    context.fillStyle = `rgba(${layer.color}, ${alpha * 0.12 * pointFade})`;
+                    context.fillRect(currentX - 0.6, barY, 1.2, barHeight * 0.55);
 
-            visiblePoints.forEach((point, pointIndex) => {
-                if (layer.headX > 0.96 || (pointIndex % 5 !== 0 && !point.isHead)) return;
-                const current = pointToCanvas(layer, point);
-                const pointFade = fadeForPoint(point);
-                if (pointFade <= 0.08) return;
+                    if (pointIndex % 6 === 0 && pointFade > 0.05) {
+                        context.fillStyle = `rgba(${layer.color}, ${alpha * 1.2 * pointFade})`;
+                        context.beginPath();
+                        context.arc(currentX, currentY, 1.05, 0, Math.PI * 2);
+                        context.fill();
+                    }
+                }
 
-                const barHeight = (4 + point.volume * 18) * (layerIndex === 0 ? 1 : 0.72);
-                const barY = current.y + height * 0.07;
-                context.fillStyle = `rgba(${layer.color}, ${alpha * 0.12 * pointFade})`;
-                context.fillRect(current.x - 0.6, barY, 1.2, barHeight * 0.55);
-            });
+                if (headPoint && headPoint.x >= visibleStart) {
+                    const pointFade = fadeForPoint(headPoint);
+                    const currentX = pointX(headPoint);
+                    const currentY = pointY(layer, headPoint);
+                    const wickHeight = height * headPoint.wick;
 
-            visiblePoints.forEach((point, pointIndex) => {
-                if (layer.headX > 0.96 || point.isHead || pointIndex % 6 !== 0) return;
-                const current = pointToCanvas(layer, point);
-                const pointFade = fadeForPoint(point);
-                if (pointFade <= 0.05) return;
-                context.fillStyle = `rgba(${layer.color}, ${alpha * 1.2 * pointFade})`;
-                context.beginPath();
-                context.arc(current.x, current.y, 1.05, 0, Math.PI * 2);
-                context.fill();
-            });
+                    context.strokeStyle = `rgba(${layer.color}, ${alpha * 0.24 * pointFade})`;
+                    context.lineWidth = 1;
+                    context.beginPath();
+                    context.moveTo(currentX, currentY - wickHeight);
+                    context.lineTo(currentX, currentY + wickHeight);
+                    context.stroke();
+                }
+            }
 
             context.restore();
         }
 
-        function renderFrame(timestamp = performance.now()) {
-            const delta = reducedMotion.matches ? 0 : Math.min(48, timestamp - lastFrame);
-            lastFrame = timestamp;
+        function renderFrame(timestamp = performance.now(), advance = !reducedMotion.matches) {
+            const delta = advance ? Math.min(48, timestamp - lastFrame) : 0;
+            if (advance) {
+                lastFrame = timestamp;
+            }
             context.clearRect(0, 0, width, height);
 
-            spawnDueLayers(timestamp);
-            layers = layers.filter((layer, layerIndex) => {
-                const alive = updateLayer(layer, layerIndex, timestamp, delta);
+            if (advance) {
+                spawnDueLayers(timestamp);
+            }
+
+            for (let layerIndex = 0; layerIndex < layers.length; layerIndex += 1) {
+                const layer = layers[layerIndex];
+                const alive = advance ? updateLayer(layer, layerIndex, timestamp, delta) : true;
                 if (alive) {
                     drawLayer(layer, layerIndex, timestamp);
+                } else {
+                    layers.splice(layerIndex, 1);
+                    layerIndex -= 1;
                 }
-                return alive;
-            });
+            }
+        }
+
+        function shouldAnimate() {
+            return running && inView && documentVisible && !reducedMotion.matches;
+        }
+
+        function startAnimation() {
+            if (playing || !shouldAnimate()) return;
+
+            const timestamp = performance.now();
+            playing = true;
+            lastFrame = timestamp;
+            lastRenderedAt = timestamp - frameInterval;
+            animationFrame = requestAnimationFrame(tick);
+        }
+
+        function stopAnimation() {
+            if (!playing) return;
+
+            playing = false;
+            cancelAnimationFrame(animationFrame);
+            animationFrame = 0;
+        }
+
+        function syncAnimationState() {
+            if (shouldAnimate()) {
+                startAnimation();
+            } else {
+                stopAnimation();
+            }
         }
 
         function tick(timestamp = performance.now()) {
-            if (!running) return;
-            renderFrame(timestamp);
+            if (!running || !playing) return;
 
-            if (!reducedMotion.matches) {
-                animationFrame = requestAnimationFrame(tick);
+            if (timestamp - lastRenderedAt >= frameInterval) {
+                renderFrame(timestamp);
+                lastRenderedAt = timestamp;
             }
+
+            animationFrame = requestAnimationFrame(tick);
+        }
+
+        function seedAnimatedLayers() {
+            const seedPositions = [-1.16, -0.98, -0.8, -0.62, -0.44, -0.27, -0.1, 0.08, 0.26, 0.44, 0.62, 0.8];
+            layers = seedPositions.map((position) => createLayer(position + (Math.random() - 0.5) * 0.08));
+            scheduleNextSpawn(performance.now());
+        }
+
+        function seedStaticLayers() {
+            layers = Array.from({ length: 5 }, () => {
+                const layer = createLayer(0);
+                layer.headX = 1;
+                layer.nextPointX = 0;
+                layer.points = [];
+
+                while (layer.nextPointX < 1) {
+                    layer.points.push(createPoint(layer.nextPointX, randomWalk(layer), layer.volatility));
+                    layer.nextPointX += layer.tickDistance * (0.72 + Math.random() * 0.64);
+                }
+
+                layer.points.push(createPoint(1, randomWalk(layer), layer.volatility));
+                return layer;
+            });
+        }
+
+        function handleVisibilityChange() {
+            documentVisible = !document.hidden;
+            if (documentVisible) {
+                lastFrame = performance.now();
+            }
+            syncAnimationState();
+        }
+
+        function handleMotionPreferenceChange() {
+            if (reducedMotion.matches) {
+                stopAnimation();
+                seedStaticLayers();
+                renderFrame(performance.now(), false);
+                return;
+            }
+
+            seedAnimatedLayers();
+            syncAnimationState();
         }
 
         const observer = new ResizeObserver(() => {
             resize();
-            renderFrame(performance.now());
+            renderFrame(performance.now(), false);
         });
+        const viewportObserver = "IntersectionObserver" in window
+            ? new IntersectionObserver(([entry]) => {
+                inView = entry.isIntersecting;
+                if (inView) {
+                    lastFrame = performance.now();
+                }
+                syncAnimationState();
+            }, { rootMargin: "120px 0px" })
+            : null;
 
         observer.observe(canvas);
-        resize();
-        const seedPositions = [-1.16, -0.98, -0.8, -0.62, -0.44, -0.27, -0.1, 0.08, 0.26, 0.44, 0.62, 0.8];
-        layers = seedPositions.map((position) => createLayer(position + (Math.random() - 0.5) * 0.08));
-        scheduleNextSpawn(performance.now());
-
-        if (reducedMotion.matches) {
-            layers = Array.from({ length: 5 }, () => createLayer(1));
-            layers.forEach((layer) => {
-                layer.headX = 1;
-                while (layer.nextPointX <= 1) {
-                    layer.points.push(createPoint(layer.nextPointX, randomWalk(layer), layer.volatility));
-                    layer.nextPointX += layer.tickDistance;
-                }
-            });
+        viewportObserver?.observe(canvas);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        if (reducedMotion.addEventListener) {
+            reducedMotion.addEventListener("change", handleMotionPreferenceChange);
+        } else {
+            reducedMotion.addListener(handleMotionPreferenceChange);
         }
-        tick();
+
+        resize();
+        if (reducedMotion.matches) {
+            seedStaticLayers();
+            renderFrame(performance.now(), false);
+        } else {
+            seedAnimatedLayers();
+            syncAnimationState();
+        }
 
         return {
             destroy() {
                 running = false;
+                stopAnimation();
                 observer.disconnect();
-                cancelAnimationFrame(animationFrame);
+                viewportObserver?.disconnect();
+                document.removeEventListener("visibilitychange", handleVisibilityChange);
+                if (reducedMotion.removeEventListener) {
+                    reducedMotion.removeEventListener("change", handleMotionPreferenceChange);
+                } else {
+                    reducedMotion.removeListener(handleMotionPreferenceChange);
+                }
             },
         };
     }
 
-    async function loadDocs(force = false) {
-        if (docsStatus === "loaded" && !force) return;
+    function formatDocsTitle(path) {
+        if (path === readmePath) return "Overview";
 
+        const filename = path.split("/").pop()?.replace(/\.md$/i, "") || path;
+        return filename
+            .replace(/[-_]+/g, " ")
+            .replace(/\b\w/g, (character) => character.toUpperCase());
+    }
+
+    function createDocsItem(path, title = "") {
+        return {
+            title: title || formatDocsTitle(path),
+            path,
+            rawUrl: `${rawBaseUrl}${encodeRepoPath(path)}`,
+            externalUrl: `${githubUrl}/blob/main/${encodeRepoPath(path)}`,
+        };
+    }
+
+    function visitTokens(tokens, visitor) {
+        tokens.forEach((token) => {
+            visitor(token);
+
+            if (token.tokens) {
+                visitTokens(token.tokens, visitor);
+            }
+
+            if (token.items) {
+                token.items.forEach((item) => visitTokens(item.tokens || [], visitor));
+            }
+        });
+    }
+
+    function getDocsNavItems(markdown) {
+        const items = [readmeItem];
+        const seen = new Set([readmePath]);
+        const tokens = marked.lexer(markdown);
+
+        visitTokens(tokens, (token) => {
+            if (token.type !== "link") return;
+
+            const docsPath = resolveMarkdownPath(token.href, readmePath);
+            if (!docsPath || seen.has(docsPath)) return;
+
+            seen.add(docsPath);
+            items.push(createDocsItem(docsPath, token.text?.trim()));
+        });
+
+        return items;
+    }
+
+    async function fetchMarkdown(item, force = false) {
+        if (!force && docsCache.has(item.path)) {
+            return docsCache.get(item.path);
+        }
+
+        const url = force ? `${item.rawUrl}?cache=${Date.now()}` : item.rawUrl;
+        const response = await fetch(url, {
+            headers: { Accept: "text/plain" },
+        });
+
+        if (!response.ok) {
+            throw new Error(`GitHub returned ${response.status}`);
+        }
+
+        const markdown = await response.text();
+        docsCache.set(item.path, markdown);
+        return markdown;
+    }
+
+    function renderDocsMarkdown(markdown, basePath) {
+        docsRenderBasePath = basePath;
+        return marked.parse(normalizeReadmeMarkdown(markdown, basePath));
+    }
+
+    function setDocsUrl(path) {
+        const target = path === readmePath ? "/docs" : `/docs?doc=${encodeURIComponent(path)}`;
+        const current = `${window.location.pathname}${window.location.search}`;
+
+        if (current !== target) {
+            window.history.pushState({}, "", target);
+            syncPath();
+        }
+    }
+
+    function selectDocsPath(path) {
+        setDocsUrl(path);
+        activeDocsPath = path;
+        loadDocs(false, path);
+    }
+
+    function handleDocsArticleClick(event) {
+        const link = event.target instanceof Element ? event.target.closest("a") : null;
+        if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+        const targetUrl = new URL(link.href, window.location.href);
+        if (targetUrl.origin !== window.location.origin || targetUrl.pathname !== "/docs") return;
+
+        event.preventDefault();
+        selectDocsPath(targetUrl.searchParams.get("doc") || readmePath);
+    }
+
+    function internalDocsLinks(node) {
+        node.addEventListener("click", handleDocsArticleClick);
+
+        return {
+            destroy() {
+                node.removeEventListener("click", handleDocsArticleClick);
+            },
+        };
+    }
+
+    async function loadDocs(force = false, requestedPath = activeDocsPath) {
+        const loadToken = ++docsLoadToken;
         docsStatus = "loading";
         docsError = "";
 
         try {
-            const response = await fetch(`${readmeUrl}?cache=${Date.now()}`, {
-                headers: { Accept: "text/plain" },
-            });
+            const readmeMarkdown = await fetchMarkdown(readmeItem, force);
+            const nextNavItems = getDocsNavItems(readmeMarkdown);
+            const selectedItem = nextNavItems.find((item) => item.path === requestedPath) ?? readmeItem;
+            const markdown = selectedItem.path === readmePath
+                ? readmeMarkdown
+                : await fetchMarkdown(selectedItem, force);
 
-            if (!response.ok) {
-                throw new Error(`GitHub returned ${response.status}`);
-            }
+            if (loadToken !== docsLoadToken) return;
 
-            const markdown = await response.text();
-            docsHtml = marked.parse(normalizeReadmeMarkdown(markdown));
+            docsNavItems = nextNavItems;
+            activeDocsPath = selectedItem.path;
+            docsHtml = renderDocsMarkdown(markdown, selectedItem.path);
             docsUpdatedAt = new Date().toLocaleString(undefined, {
                 dateStyle: "medium",
                 timeStyle: "short",
             });
             docsStatus = "loaded";
         } catch (error) {
-            docsError = error.message || "Could not load README.md from GitHub.";
+            if (loadToken !== docsLoadToken) return;
+
+            docsError = error.message || "Could not load documentation from GitHub.";
             docsStatus = "error";
+        }
+    }
+
+    function handlePopState() {
+        syncPath();
+        if (path === "/docs") {
+            loadDocs(false, activeDocsPath);
         }
     }
 
     onMount(() => {
         detectPlatform();
         syncPath();
-        window.addEventListener("popstate", syncPath);
+        window.addEventListener("popstate", handlePopState);
 
-        return () => window.removeEventListener("popstate", syncPath);
+        return () => window.removeEventListener("popstate", handlePopState);
     });
 
     $: if (isDocsPage && docsStatus === "idle") {
@@ -525,7 +919,6 @@
         </a>
 
         <nav class="nav-links" aria-label="Primary navigation">
-            <a href={githubUrl}>GitHub</a>
             <a class:active={isDocsPage} href="/docs" on:click={(event) => navigate(event, "/docs")}>Docs</a>
             <button type="button" on:click={placeholderAction}>Releases</button>
         </nav>
@@ -565,13 +958,13 @@
                     The docs below are fetched directly from the Kerosene GitHub README so this page stays aligned with the source repository.
                 </p>
                 <div class="docs-actions">
-                    <button class="button secondary" type="button" on:click={() => loadDocs(true)} disabled={docsStatus === "loading"}>
+                    <button class="button secondary" type="button" on:click={() => loadDocs(true, activeDocsPath)} disabled={docsStatus === "loading"}>
                         <RefreshCw size={17} />
                         <span>{docsStatus === "loading" ? "Refreshing" : "Refresh from GitHub"}</span>
                     </button>
-                    <a class="button secondary" href={`${githubUrl}/blob/main/README.md`}>
+                    <a class="button secondary" href={activeDocsItem.externalUrl}>
                         <ExternalLink size={17} />
-                        <span>Open README</span>
+                        <span>Open on GitHub</span>
                     </a>
                 </div>
                 {#if docsUpdatedAt}
@@ -579,20 +972,38 @@
                 {/if}
             </div>
 
-            <article class="docs-card" aria-live="polite">
-                {#if docsStatus === "loading"}
-                    <div class="docs-loading">Fetching README.md from GitHub…</div>
-                {:else if docsStatus === "error"}
-                    <div class="docs-error">
-                        <strong>Could not load docs.</strong>
-                        <span>{docsError}</span>
-                    </div>
-                {:else}
-                    <div class="markdown-body">
-                        {@html docsHtml}
-                    </div>
-                {/if}
-            </article>
+            <div class="docs-layout">
+                <aside class="docs-sidebar" aria-label="Documentation files">
+                    <p class="docs-sidebar-label">Documentation</p>
+                    <nav>
+                        {#each docsNavItems as item}
+                            <button
+                                class:active={item.path === activeDocsPath}
+                                type="button"
+                                on:click={() => selectDocsPath(item.path)}
+                            >
+                                <span>{item.title}</span>
+                                <small>{item.path}</small>
+                            </button>
+                        {/each}
+                    </nav>
+                </aside>
+
+                <article class="docs-card" aria-live="polite">
+                    {#if docsStatus === "loading"}
+                        <div class="docs-loading">Fetching {activeDocsItem.path} from GitHub…</div>
+                    {:else if docsStatus === "error"}
+                        <div class="docs-error">
+                            <strong>Could not load docs.</strong>
+                            <span>{docsError}</span>
+                        </div>
+                    {:else}
+                        <div class="markdown-body" use:internalDocsLinks>
+                            {@html docsHtml}
+                        </div>
+                    {/if}
+                </article>
+            </div>
         </section>
     {:else}
         <section class="hero" aria-labelledby="hero-title">
@@ -672,6 +1083,28 @@
                     <p>Choose between many trader-first features.</p>
                 </article>
             </div>
+
+            <section class="features-section" aria-labelledby="features-title">
+                <div class="features-header">
+                    <p class="eyebrow">
+                        <TerminalSquare size={15} />
+                        Features
+                    </p>
+                    <h2 id="features-title">Built for active Hyperliquid workflows.</h2>
+                </div>
+
+                <div class="features-grid">
+                    {#each featureHighlights as feature}
+                        <article class="feature-card" style={`--feature-accent: ${feature.accent}`}>
+                            <span class="feature-icon" aria-hidden="true">
+                                <svelte:component this={feature.icon} size={19} />
+                            </span>
+                            <h3>{feature.title}</h3>
+                            <p>{feature.description}</p>
+                        </article>
+                    {/each}
+                </div>
+            </section>
         </section>
     {/if}
 </main>
