@@ -60,6 +60,47 @@ body::before {
   mix-blend-mode: screen;
 }
 
+.orange-cursor-ring {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+  width: 54px;
+  height: 54px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate3d(var(--cursor-x, -100px), var(--cursor-y, -100px), 0) translate(-50%, -50%) scale(0.82);
+  transition:
+    opacity 140ms ease,
+    transform 90ms ease-out;
+}
+
+.orange-cursor-ring::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  border-radius: 999px;
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(255, 138, 31, 0.62) 0deg 9deg,
+    transparent 9deg 27deg
+  );
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), black calc(100% - 2px));
+  animation: cursor-ring-spin 6s linear infinite;
+  filter: drop-shadow(0 0 10px rgba(255, 138, 31, 0.12));
+}
+
+.orange-cursor-ring.visible {
+  opacity: 1;
+  transform: translate3d(var(--cursor-x, -100px), var(--cursor-y, -100px), 0) translate(-50%, -50%) scale(1);
+}
+
+@keyframes cursor-ring-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -101,29 +142,6 @@ button {
 
 .shell::after {
   right: clamp(1rem, 3.4vw, 3rem);
-}
-
-.side-rail {
-  position: fixed;
-  top: 72px;
-  bottom: 0;
-  width: 1px;
-  color: rgba(255, 138, 31, 0.18);
-  background-image: repeating-linear-gradient(
-    to bottom,
-    currentColor 0,
-    currentColor 4px,
-    transparent 4px,
-    transparent 10px
-  );
-}
-
-.side-rail.left {
-  left: clamp(2.6rem, 10.8vw, 10rem);
-}
-
-.side-rail.right {
-  right: clamp(2.6rem, 10.8vw, 10rem);
 }
 
 .topbar {
@@ -195,9 +213,14 @@ button {
 
 .nav-links a:hover,
 .nav-links button:hover,
+.nav-links a.active,
 .ghost-link:hover {
   border-color: var(--border);
   background: rgba(255, 255, 255, 0.04);
+}
+
+.nav-links a.active {
+  color: var(--accent-soft);
 }
 
 .nav-actions {
@@ -252,24 +275,46 @@ button {
 
 .hero {
   position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: grid;
   grid-template-rows: auto auto 1fr;
   max-width: 1120px;
   min-height: calc(100vh - 130px);
   margin: 0 auto;
   border-inline: 1px solid var(--border);
+  background:
+    radial-gradient(circle at 50% 24%, rgba(255, 138, 31, 0.045), transparent 34rem),
+    var(--page);
 }
 
 .hero::before {
   position: absolute;
   inset: 0;
-  z-index: -1;
+  z-index: 0;
   content: "";
   background:
-    linear-gradient(90deg, transparent, rgba(255, 138, 31, 0.055), transparent),
-    linear-gradient(rgba(255, 255, 255, 0.026) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.026) 1px, transparent 1px);
-  background-size: auto, 40px 40px, 40px 40px;
+    linear-gradient(90deg, transparent, rgba(255, 138, 31, 0.04), transparent),
+    linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+  background-position: center, top left, top left;
+  background-size: auto, 48px 48px, 48px 48px;
+}
+
+.market-background {
+  position: absolute;
+  inset: -14% -8% -8%;
+  z-index: 1;
+  width: 116%;
+  height: 122%;
+  pointer-events: none;
+  opacity: 0.88;
+  filter: blur(0.15px) saturate(0.9);
+  mask-image: radial-gradient(circle at 50% 43%, black 0 42%, rgba(0, 0, 0, 0.58) 62%, transparent 88%);
+}
+
+.market-background::selection {
+  background: transparent;
 }
 
 .hero-grid-node {
@@ -303,6 +348,8 @@ button {
 }
 
 .hero-copy {
+  position: relative;
+  z-index: 3;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -402,6 +449,8 @@ kbd {
 }
 
 .feature-strip {
+  position: relative;
+  z-index: 3;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   border-top: 1px solid var(--border);
@@ -431,6 +480,235 @@ kbd {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.82rem;
   line-height: 1.45;
+}
+
+.docs-page {
+  position: relative;
+  max-width: 1120px;
+  margin: 0 auto;
+  border-inline: 1px solid var(--border);
+  min-height: calc(100vh - 130px);
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 138, 31, 0.045), transparent),
+    linear-gradient(rgba(255, 255, 255, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.026) 1px, transparent 1px);
+  background-size: auto, 40px 40px, 40px 40px;
+}
+
+.docs-header {
+  width: min(820px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: clamp(3.5rem, 8vh, 5.5rem) 0 2rem;
+  text-align: center;
+}
+
+.docs-header h1 {
+  margin-inline: auto;
+}
+
+.docs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.65rem;
+  margin-top: 1.6rem;
+}
+
+.docs-actions .button:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.docs-card {
+  width: min(920px, calc(100% - 2rem));
+  margin: 0 auto 4rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018)),
+    rgba(10, 11, 13, 0.88);
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.34);
+}
+
+.docs-loading,
+.docs-error {
+  display: grid;
+  gap: 0.35rem;
+  padding: 2rem;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9rem;
+}
+
+.docs-error strong {
+  color: #fff2e4;
+}
+
+.markdown-body {
+  padding: clamp(1.15rem, 3vw, 2.4rem);
+  color: #e8e1d8;
+  font-size: 0.98rem;
+  line-height: 1.68;
+}
+
+.markdown-body > *:first-child {
+  margin-top: 0;
+}
+
+.markdown-body > *:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  color: #fff2e4;
+  font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+  font-weight: 500;
+  line-height: 1.15;
+  scroll-margin-top: 90px;
+}
+
+.markdown-body h1 {
+  margin: 0 0 1.15rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: clamp(2rem, 4vw, 3rem);
+}
+
+.markdown-body h2 {
+  margin: 2.2rem 0 0.8rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--border);
+  font-size: clamp(1.55rem, 2.8vw, 2.1rem);
+}
+
+.markdown-body h3 {
+  margin: 1.7rem 0 0.6rem;
+  font-size: 1.3rem;
+}
+
+.markdown-body h4 {
+  margin: 1.3rem 0 0.45rem;
+  color: var(--accent-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.95rem;
+}
+
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body blockquote,
+.markdown-body pre,
+.markdown-body .docs-table-wrap {
+  margin: 0 0 1.05rem;
+}
+
+.markdown-body p,
+.markdown-body li {
+  color: var(--muted);
+}
+
+.markdown-body a {
+  color: var(--accent-soft);
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 138, 31, 0.38);
+  text-underline-offset: 0.18em;
+}
+
+.markdown-body a:hover {
+  color: #ffe0bb;
+  text-decoration-color: var(--accent);
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.35rem;
+}
+
+.markdown-body li + li {
+  margin-top: 0.35rem;
+}
+
+.markdown-body blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 0.15rem 0 0.15rem 1rem;
+  color: #d8d0c7;
+  background: rgba(255, 138, 31, 0.055);
+}
+
+.markdown-body code {
+  border: 1px solid rgba(255, 138, 31, 0.18);
+  border-radius: 4px;
+  padding: 0.12rem 0.28rem;
+  color: #ffd7aa;
+  background: rgba(255, 138, 31, 0.08);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.markdown-body pre {
+  overflow-x: auto;
+  border: 1px solid rgba(255, 255, 255, 0.095);
+  border-radius: 6px;
+  padding: 1rem;
+  background: #07080a;
+}
+
+.markdown-body pre code {
+  display: block;
+  border: 0;
+  padding: 0;
+  color: #f1d7b5;
+  background: transparent;
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.docs-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 520px;
+  font-size: 0.9rem;
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 0.72rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-body th {
+  color: #fff2e4;
+  background: rgba(255, 138, 31, 0.075);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.78rem;
+}
+
+.markdown-body tr:last-child td {
+  border-bottom: 0;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.markdown-body hr {
+  height: 1px;
+  margin: 2rem 0;
+  border: 0;
+  background: var(--border);
 }
 
 @media (max-width: 860px) {
