@@ -1,4 +1,5 @@
 <script>
+    import DOMPurify from "dompurify";
     import { marked } from "marked";
     import {
         Apple,
@@ -30,6 +31,21 @@
         path: readmePath,
         rawUrl: readmeUrl,
         externalUrl: `${githubUrl}/blob/main/README.md`,
+    };
+    const fallbackRelease = {
+        name: "v0.1.1-alpha",
+        tagName: "latest",
+        htmlUrl: `${githubUrl}/releases/tag/latest`,
+        assets: [
+            {
+                name: "Kerosene-0.1.1-x86_64.AppImage",
+                browserDownloadUrl: `${githubUrl}/releases/download/latest/Kerosene-0.1.1-x86_64.AppImage`,
+            },
+            {
+                name: "kerosene_0.1.1-1_amd64.deb",
+                browserDownloadUrl: `${githubUrl}/releases/download/latest/kerosene_0.1.1-1_amd64.deb`,
+            },
+        ],
     };
 
     marked.use({
@@ -126,8 +142,8 @@
     let activeDocsPath = readmePath;
     let docsRenderBasePath = readmePath;
     let docsLoadToken = 0;
-    let latestRelease = null;
-    let releaseStatus = "idle";
+    let latestRelease = fallbackRelease;
+    let releaseStatus = "fallback";
     let releaseError = "";
     const docsCache = new Map();
 
@@ -351,8 +367,8 @@
             return "Checking the latest GitHub release.";
         }
 
-        if (status === "error") {
-            return `${error || "Could not check GitHub releases."} Opening the releases page.`;
+        if (status === "fallback" && error) {
+            return `${error || "Could not check GitHub releases."} Using bundled release links.`;
         }
 
         if (asset) {
@@ -888,15 +904,17 @@
             };
             releaseStatus = "loaded";
         } catch (error) {
-            latestRelease = null;
+            latestRelease = fallbackRelease;
             releaseError = error.message || "Could not check GitHub releases.";
-            releaseStatus = "error";
+            releaseStatus = "fallback";
         }
     }
 
     function renderDocsMarkdown(markdown, basePath) {
         docsRenderBasePath = basePath;
-        return marked.parse(normalizeReadmeMarkdown(markdown, basePath));
+        return DOMPurify.sanitize(marked.parse(normalizeReadmeMarkdown(markdown, basePath)), {
+            ADD_ATTR: ["align", "width", "height"],
+        });
     }
 
     function setDocsUrl(path) {

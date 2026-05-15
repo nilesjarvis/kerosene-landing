@@ -7,6 +7,18 @@ This directory is an inspiration workspace for a future Kerosene landing page. T
 screenshots are reference material only; the final Kerosene site should use its own
 copy, screenshots, graphics, and brand system.
 
+## Production Notes
+
+- Download links fetch the newest non-draft GitHub release from
+  `nilesjarvis/kerosene`, including prereleases. The site keeps bundled fallback
+  links for the current alpha release so CTAs still work if GitHub's API is
+  rate-limited or unavailable.
+- The docs page renders Markdown fetched from GitHub through `marked`, then
+  sanitizes the generated HTML with DOMPurify before injecting it into Svelte.
+- Open Graph and Twitter metadata point at `public/social-card.svg`. If the site is
+  deployed behind a fixed canonical domain, update social image URLs to absolute
+  production URLs for crawler compatibility.
+
 ## Screenshot Inventory
 
 | File | View | Notes |
