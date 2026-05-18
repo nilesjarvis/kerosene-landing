@@ -207,6 +207,31 @@
         window.scrollTo(0, 0);
     }
 
+    function isEditableTarget(target) {
+        if (!(target instanceof Element)) return false;
+
+        return Boolean(target.closest("input, textarea, select, button, [contenteditable='true']"));
+    }
+
+    function handleDownloadHotkey(event) {
+        if (
+            isDocsPage ||
+            event.repeat ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey ||
+            isEditableTarget(event.target)
+        ) {
+            return;
+        }
+
+        if (event.key.toLowerCase() !== "d") return;
+
+        event.preventDefault();
+        window.location.href = primaryDownloadUrl;
+    }
+
     function escapeHtml(value) {
         return value
             .replaceAll("&", "&amp;")
@@ -997,8 +1022,12 @@
         syncPath();
         loadLatestRelease();
         window.addEventListener("popstate", handlePopState);
+        window.addEventListener("keydown", handleDownloadHotkey);
 
-        return () => window.removeEventListener("popstate", handlePopState);
+        return () => {
+            window.removeEventListener("popstate", handlePopState);
+            window.removeEventListener("keydown", handleDownloadHotkey);
+        };
     });
 
     $: if (isDocsPage && docsStatus === "idle") {
