@@ -33,17 +33,21 @@
         externalUrl: `${githubUrl}/blob/main/README.md`,
     };
     const fallbackRelease = {
-        name: "v0.1.1-alpha",
-        tagName: "latest",
-        htmlUrl: `${githubUrl}/releases/tag/latest`,
+        name: "v0.1.4-alpha",
+        tagName: "v0.1.4",
+        htmlUrl: `${githubUrl}/releases/tag/v0.1.4`,
         assets: [
             {
-                name: "Kerosene-0.1.1-x86_64.AppImage",
-                browserDownloadUrl: `${githubUrl}/releases/download/latest/Kerosene-0.1.1-x86_64.AppImage`,
+                name: "Kerosene-0.1.4-macos-arm64.dmg",
+                browserDownloadUrl: `${githubUrl}/releases/download/v0.1.4/Kerosene-0.1.4-macos-arm64.dmg`,
             },
             {
-                name: "kerosene_0.1.1-1_amd64.deb",
-                browserDownloadUrl: `${githubUrl}/releases/download/latest/kerosene_0.1.1-1_amd64.deb`,
+                name: "Kerosene-0.1.4-x86_64.AppImage",
+                browserDownloadUrl: `${githubUrl}/releases/download/v0.1.4/Kerosene-0.1.4-x86_64.AppImage`,
+            },
+            {
+                name: "kerosene_0.1.4-1_amd64.deb",
+                browserDownloadUrl: `${githubUrl}/releases/download/v0.1.4/kerosene_0.1.4-1_amd64.deb`,
             },
         ],
     };
@@ -64,8 +68,8 @@
 
     const downloadTargets = {
         mac: {
-            label: "View Linux releases",
-            detail: "macOS build planned",
+            label: "Download macOS DMG",
+            detail: "macOS Apple silicon",
             icon: Apple,
         },
         windows: {
@@ -80,7 +84,7 @@
         },
         unknown: {
             label: "View releases",
-            detail: "Linux builds available now",
+            detail: "macOS and Linux builds available now",
             icon: Download,
         },
     };
@@ -380,7 +384,7 @@
 
     function findReleaseAsset(kind, assets) {
         if (kind === "unknown") {
-            return assets[0] ?? null;
+            return null;
         }
 
         const matchers = assetMatchers[kind] ?? [];
@@ -400,7 +404,7 @@
             return `Latest release ${name}. ${asset.name}.`;
         }
 
-        return `Latest release ${name}. Linux builds are available on GitHub.`;
+        return `Latest release ${name}. macOS and Linux builds are available on GitHub.`;
     }
 
     function animatedChart(canvas) {
