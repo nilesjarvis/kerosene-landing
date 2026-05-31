@@ -2,20 +2,23 @@
     import DOMPurify from "dompurify";
     import { marked } from "marked";
     import {
-        Apple,
         Activity,
+        Apple,
+        BarChart3,
         BookOpen,
         Download,
         ExternalLink,
         FileArchive,
-        Filter,
         Github,
+        Grid3x3,
+        Keyboard,
+        Layers,
         MonitorDown,
         Package,
         RefreshCw,
+        SlidersHorizontal,
         TerminalSquare,
         Timer,
-        VolumeX,
         Wallet,
     } from "lucide-svelte";
     import { onMount } from "svelte";
@@ -48,6 +51,10 @@
             {
                 name: "kerosene_0.1.4-1_amd64.deb",
                 browserDownloadUrl: `${githubUrl}/releases/download/v0.1.4/kerosene_0.1.4-1_amd64.deb`,
+            },
+            {
+                name: "kerosene-0.1.4-1.x86_64.rpm",
+                browserDownloadUrl: `${githubUrl}/releases/download/v0.1.4/kerosene-0.1.4-1.x86_64.rpm`,
             },
         ],
     };
@@ -82,6 +89,11 @@
             detail: "Debian / Ubuntu",
             icon: Package,
         },
+        fedora: {
+            label: "Download .rpm",
+            detail: "Fedora / RHEL",
+            icon: Package,
+        },
         unknown: {
             label: "View releases",
             detail: "macOS and Linux builds available now",
@@ -93,47 +105,113 @@
         mac: [/\.(dmg|pkg)$/i, /\b(mac|macos|darwin|apple)\b/i],
         windows: [/\.(exe|msi)$/i, /\b(win|windows)\b/i],
         linux: [/\.deb$/i],
+        fedora: [/\.rpm$/i],
         appimage: [/\.appimage$/i],
     };
 
-    const featureHighlights = [
+    const featureRows = [
         {
-            title: "Mute Tickers",
-            description: "Hide noisy symbols from search, watchlists, and trading panes so the workspace stays focused.",
-            icon: VolumeX,
-            accent: "#ff8a1f",
+            id: "charts",
+            eyebrow: "Market Data",
+            title: "Read markets at a glance.",
+            description:
+                "Candlestick charts, a live L2 order book, and streaming market data — all native, no browser tabs.",
+            bullets: [
+                "1m to 1M timeframes with multi-chart side-by-side views",
+                "Live L2 order book with configurable tick grouping",
+                "Funding rate, open interest, mark/oracle price for perpetuals",
+            ],
+            screenshotAlt: "Kerosene chart and order book view",
         },
         {
-            title: "HIP-3-Only Mode",
-            description: "Filter the terminal down to HIP-3 markets when a session needs a narrower venue scope.",
-            icon: Filter,
-            accent: "#6ee7b7",
+            id: "trading",
+            eyebrow: "Order Entry",
+            title: "Trade directly from the chart.",
+            description:
+                "Limit and market orders across perpetuals and spot. Drag lines to reprice, right-click to cancel.",
+            bullets: [
+                "Perpetual and spot — main dex, HIP-3 dexes, and spot pairs",
+                "Drag-to-move limit orders on the chart canvas",
+                "Reduce-only, one-click midpoint fill, and chart order overlays",
+            ],
+            screenshotAlt: "Kerosene order entry pane with chart order lines",
         },
         {
-            title: "Advanced Orders",
-            description: "Run client-side Chase orders and TWAP schedules with local lifecycle tracking.",
-            icon: Timer,
-            accent: "#a5b4fc",
+            id: "advanced-orders",
+            eyebrow: "Advanced Orders",
+            title: "Let the terminal work while you scan.",
+            description:
+                "Chase orders reprice at best bid/ask until filled. TWAP orders split execution into scheduled IOC slices.",
+            bullets: [
+                "Chase: auto-reprice toward fill with partial-fill tracking",
+                "TWAP: configurable duration, slice count, and hard price ranges",
+                "Stop controls, lifecycle limits, and persisted history",
+            ],
+            screenshotAlt: "Kerosene advanced orders pane with Chase and TWAP",
         },
         {
-            title: "Liquidation Feed",
-            description: "Watch liquidation flow alongside active markets without leaving the trading layout.",
-            icon: Activity,
-            accent: "#fda4af",
+            id: "alfred",
+            eyebrow: "Command Palette",
+            title: "Type less, act faster.",
+            description:
+                "Alfred drafts trading actions from typed commands. Buy, sell, close, nuke — all from one input.",
+            bullets: [
+                "Natural-language: buy $1k HYPE, chase buy $1k HYPE at 43",
+                "close HYPE, close 25% HYPE, nuke (close all positions)",
+                "Built-in safety validation — missing account, unknown symbol, stale data",
+            ],
+            screenshotAlt: "Kerosene Alfred command palette overlay",
         },
         {
-            title: "Wallet Tracker",
-            description: "Follow saved wallets, balances, and address-book context from the same desktop terminal.",
-            icon: Wallet,
-            accent: "#67e8f9",
+            id: "portfolio",
+            eyebrow: "Portfolio & Account",
+            title: "Know your exposure in real time.",
+            description:
+                "Live positions, streaming PnL, margin, and notional exposure update as markets move.",
+            bullets: [
+                "Real-time PnL from streaming mid prices",
+                "Account summary: margin, equity, notional exposure",
+                "Wallet tracker with saved wallets and address-book context",
+            ],
+            screenshotAlt: "Kerosene portfolio with live positions and account summary",
         },
         {
-            title: "Local Trading Journal",
-            description: "Review fills and aggregated trades locally, including diagnostics for position chains.",
-            icon: BookOpen,
-            accent: "#fcd34d",
+            id: "journal",
+            eyebrow: "Trading Journal",
+            title: "Reconstruct every trade.",
+            description:
+                "The local journal rebuilds trades from raw fills. Grouped cards show entry, exit, PnL, and fees.",
+            bullets: [
+                "Fill-to-trade aggregation with open, close, and flip detection",
+                "Same-millisecond position-chain ordering for accurate execution history",
+                "Realized PnL, cumulative fees, win rate, and per-trade notes",
+            ],
+            screenshotAlt: "Kerosene trading journal with aggregated trade cards",
+        },
+        {
+            id: "workspace",
+            eyebrow: "Workspace",
+            title: "A terminal that fits your workflow.",
+            description:
+                "Resize, split, and reconfigure the pane grid. Switch themes, mute noise, and filter venues.",
+            bullets: [
+                "Resizable pane grid — drag splitters between charts, books, and tools",
+                "Bundled dark themes and custom theme support",
+                "HIP-3-only mode, mute tickers, and liquidation feed",
+            ],
+            screenshotAlt: "Kerosene workspace with pane grid and theme selector",
         },
     ];
+
+    const featureIcons = {
+        charts: BarChart3,
+        trading: Activity,
+        "advanced-orders": Timer,
+        alfred: Keyboard,
+        portfolio: Wallet,
+        journal: BookOpen,
+        workspace: SlidersHorizontal,
+    };
 
     let platform = "unknown";
     let platformName = "your platform";
@@ -184,8 +262,13 @@
         }
 
         if (platformHint.includes("linux") || userAgent.includes("linux")) {
-            platform = "linux";
-            platformName = "Linux";
+            if (userAgent.includes("fedora") || userAgent.includes("rhel")) {
+                platform = "fedora";
+                platformName = "Fedora";
+            } else {
+                platform = "linux";
+                platformName = "Linux";
+            }
         }
     }
 
@@ -1173,7 +1256,7 @@
                         <kbd>D</kbd>
                     </a>
 
-                    {#if platform === "linux"}
+                    {#if platform === "linux" || platform === "fedora"}
                         <a
                             class="button secondary"
                             href={appImageDownloadUrl}
@@ -1216,26 +1299,33 @@
                 </article>
             </div>
 
-            <section class="features-section" aria-labelledby="features-title">
-                <div class="features-header">
-                    <p class="eyebrow">
-                        <TerminalSquare size={15} />
-                        Features
-                    </p>
-                    <h2 id="features-title">Built for active Hyperliquid workflows.</h2>
-                </div>
-
-                <div class="features-grid">
-                    {#each featureHighlights as feature}
-                        <article class="feature-card" style={`--feature-accent: ${feature.accent}`}>
-                            <span class="feature-icon" aria-hidden="true">
-                                <svelte:component this={feature.icon} size={19} />
-                            </span>
-                            <h3>{feature.title}</h3>
-                            <p>{feature.description}</p>
-                        </article>
-                    {/each}
-                </div>
+            <section class="features-section" aria-label="Feature deep-dives">
+                {#each featureRows as feature, index}
+                    <article
+                        class="feature-row"
+                        class:feature-row-reverse={index % 2 === 1}
+                        id={`feature-${feature.id}`}
+                    >
+                        <div class="feature-screenshot" aria-label={feature.screenshotAlt}>
+                            <div class="screenshot-placeholder">
+                                <span class="screenshot-placeholder-icon" aria-hidden="true">
+                                    <svelte:component this={featureIcons[feature.id] ?? TerminalSquare} size={28} />
+                                </span>
+                                <span class="screenshot-label">Screenshot — {feature.eyebrow}</span>
+                            </div>
+                        </div>
+                        <div class="feature-copy">
+                            <p class="eyebrow">{feature.eyebrow}</p>
+                            <h2>{feature.title}</h2>
+                            <p class="feature-lede">{feature.description}</p>
+                            <ul class="feature-bullets">
+                                {#each feature.bullets as bullet}
+                                    <li>{bullet}</li>
+                                {/each}
+                            </ul>
+                        </div>
+                    </article>
+                {/each}
             </section>
         </section>
     {/if}
