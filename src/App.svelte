@@ -22,6 +22,7 @@
         Wallet,
     } from "lucide-svelte";
     import { onMount } from "svelte";
+    import { readReleaseCache, selectPublishedRelease, writeReleaseCache } from "./release.js";
 
     const githubUrl = "https://github.com/nilesjarvis/kerosene";
     const releasesUrl = `${githubUrl}/releases`;
@@ -36,25 +37,25 @@
         externalUrl: `${githubUrl}/blob/main/README.md`,
     };
     const fallbackRelease = {
-        name: "v0.1.4-alpha",
-        tagName: "v0.1.4",
-        htmlUrl: `${githubUrl}/releases/tag/v0.1.4`,
+        name: "v0.1.8",
+        tagName: "v0.1.8",
+        htmlUrl: `${githubUrl}/releases/tag/v0.1.8`,
         assets: [
             {
-                name: "Kerosene-0.1.4-macos-arm64.dmg",
-                browserDownloadUrl: `${githubUrl}/releases/download/v0.1.4/Kerosene-0.1.4-macos-arm64.dmg`,
+                name: "Kerosene-0.1.8-macos-arm64.dmg",
+                browserDownloadUrl: `${githubUrl}/releases/download/v0.1.8/Kerosene-0.1.8-macos-arm64.dmg`,
             },
             {
-                name: "Kerosene-0.1.4-x86_64.AppImage",
-                browserDownloadUrl: `${githubUrl}/releases/download/v0.1.4/Kerosene-0.1.4-x86_64.AppImage`,
+                name: "Kerosene-0.1.8-x86_64.AppImage",
+                browserDownloadUrl: `${githubUrl}/releases/download/v0.1.8/Kerosene-0.1.8-x86_64.AppImage`,
             },
             {
-                name: "kerosene_0.1.4-1_amd64.deb",
-                browserDownloadUrl: `${githubUrl}/releases/download/v0.1.4/kerosene_0.1.4-1_amd64.deb`,
+                name: "kerosene_0.1.8-1_amd64.deb",
+                browserDownloadUrl: `${githubUrl}/releases/download/v0.1.8/kerosene_0.1.8-1_amd64.deb`,
             },
             {
-                name: "kerosene-0.1.4-1.x86_64.rpm",
-                browserDownloadUrl: `${githubUrl}/releases/download/v0.1.4/kerosene-0.1.4-1.x86_64.rpm`,
+                name: "kerosene-0.1.8-1.x86_64.rpm",
+                browserDownloadUrl: `${githubUrl}/releases/download/v0.1.8/kerosene-0.1.8-1.x86_64.rpm`,
             },
         ],
     };
@@ -985,35 +986,42 @@
         return markdown;
     }
 
+    function getReleaseCacheStorage() {
+        try {
+            return window.localStorage;
+        } catch {
+            return null;
+        }
+    }
+
     async function loadLatestRelease() {
         releaseStatus = "loading";
         releaseError = "";
 
+        const storage = getReleaseCacheStorage();
+        const cachedRelease = readReleaseCache(storage);
+
+        if (cachedRelease) {
+            latestRelease = cachedRelease.release;
+            releaseStatus = "cached";
+            return;
+        }
+
         try {
             const response = await fetch(releasesApiUrl, {
-                headers: { Accept: "application/vnd.github+json" },
+                headers: {
+                    Accept: "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
             });
 
             if (!response.ok) {
                 throw new Error(`GitHub returned ${response.status}`);
             }
 
-            const releases = JSON.parse(await response.text());
-            const release = releases.find((item) => !item.draft);
-
-            if (!release) {
-                throw new Error("No published releases found.");
-            }
-
-            latestRelease = {
-                name: release.name || release.tag_name,
-                tagName: release.tag_name,
-                htmlUrl: release.html_url,
-                assets: (release.assets ?? []).map((asset) => ({
-                    name: asset.name,
-                    browserDownloadUrl: asset.browser_download_url,
-                })),
-            };
+            const release = selectPublishedRelease(await response.json());
+            latestRelease = release;
+            writeReleaseCache(storage, release);
             releaseStatus = "loaded";
         } catch (error) {
             latestRelease = fallbackRelease;

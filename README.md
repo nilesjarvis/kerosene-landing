@@ -3,9 +3,9 @@
 ## Production Notes
 
 - Download links fetch the newest non-draft GitHub release from
-  `nilesjarvis/kerosene`, including prereleases. The site keeps bundled fallback
-  links for the current alpha release so CTAs still work if GitHub's API is
-  rate-limited or unavailable.
+  `nilesjarvis/kerosene`, including prereleases. Successful checks are cached in
+  the browser for one hour, and bundled fallback links keep CTAs working if
+  GitHub's API is rate-limited or unavailable.
 - The docs page renders Markdown fetched from GitHub through `marked`, then
   sanitizes the generated HTML with DOMPurify before injecting it into Svelte.
 - Open Graph and Twitter metadata point at `public/social-card.svg`. If the site is
